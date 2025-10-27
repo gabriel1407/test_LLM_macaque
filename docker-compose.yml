@@ -24,63 +24,24 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: development  # Usa la etapa de desarrollo con --reload
     container_name: llm-summarizer-api
     restart: unless-stopped
     ports:
       - "8000:8000"
-    environment:
-      # Application Configuration
-      - APP_NAME=LLM Summarizer Service
-      - ENVIRONMENT=production
-      - DEBUG=false
-      
-      # API Configuration
-      - API_HOST=0.0.0.0
-      - API_PORT=8000
-      - API_KEYS_ALLOWED=["your-production-api-key-1","your-production-api-key-2"]
-      
-      # LLM Provider Configuration
-      - LLM_PROVIDER=openai
-      - PROVIDER_API_KEY=${OPENAI_API_KEY}
-      
-      # Summary Configuration
-      - SUMMARY_MAX_TOKENS=150
-      - LANG_DEFAULT=auto
-      - MAX_TEXT_LENGTH=50000
-      
-      # Timeout and Retry Configuration
-      - REQUEST_TIMEOUT_MS=10000
-      - LLM_TIMEOUT_MS=8000
-      - MAX_RETRIES=2
-      - RETRY_DELAY_MS=1000
-      
-      # Rate Limiting
-      - ENABLE_RATE_LIMIT=true
-      - RATE_LIMIT_REQUESTS=100
-      - RATE_LIMIT_WINDOW=3600
-      
-      # Redis Configuration
-      - REDIS_URL=redis://redis:6379/0
-      - REDIS_TTL=3600
-      
-      # Security
-      - CORS_ORIGINS=["*"]
-      - MAX_PAYLOAD_SIZE=1048576
-      
-      # Logging
-      - LOG_LEVEL=INFO
-      - LOG_FORMAT=json
     depends_on:
       redis:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    # Healthcheck desactivado para desarrollo (descomentar para producción)
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:8000/v1/healthz"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
     networks:
       - llm-summarizer-network
     volumes:
+      - ./app:/app/app:ro  # Monta el código fuente para hot reload
       - ./logs:/app/logs
 
   # Redis Commander for Redis management (optional)

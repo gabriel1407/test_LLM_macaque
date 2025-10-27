@@ -118,22 +118,44 @@ class SummaryRequest(BaseModel):
         Convert request to LLM prompt based on tone and language.
         This encapsulates the business logic for prompt generation.
         """
-        base_prompt = f"Please summarize the following text in {self.max_tokens} tokens or less"
+        # Language-specific prompts
+        if self.lang == LanguageCode.SPANISH or (self.lang == LanguageCode.AUTO and self._detect_spanish()):
+            base_prompt = f"Por favor, resume el siguiente texto en {self.max_tokens} tokens o menos"
+            tone_instructions = {
+                ToneType.NEUTRAL: "Proporciona un resumen balanceado y objetivo.",
+                ToneType.CONCISE: "Sé extremadamente conciso y enfócate solo en los puntos más importantes.",
+                ToneType.BULLET: "Formatea el resumen como viñetas destacando la información clave."
+            }
+        else:
+            base_prompt = f"Please summarize the following text in {self.max_tokens} tokens or less"
+            tone_instructions = {
+                ToneType.NEUTRAL: "Provide a balanced and objective summary.",
+                ToneType.CONCISE: "Be extremely concise and focus only on the most important points.",
+                ToneType.BULLET: "Format the summary as bullet points highlighting key information."
+            }
         
-        # Add language instruction if not auto
-        if self.lang != LanguageCode.AUTO:
+        # Add explicit language instruction for auto-detection
+        if self.lang == LanguageCode.AUTO:
+            base_prompt += ". Respond in the same language as the input text"
+        elif self.lang != LanguageCode.SPANISH:
             base_prompt += f" in {self.lang}"
-        
-        # Add tone-specific instructions
-        tone_instructions = {
-            ToneType.NEUTRAL: "Provide a balanced and objective summary.",
-            ToneType.CONCISE: "Be extremely concise and focus only on the most important points.",
-            ToneType.BULLET: "Format the summary as bullet points highlighting key information."
-        }
         
         instruction = tone_instructions.get(self.tone, tone_instructions[ToneType.NEUTRAL])
         
         return f"{base_prompt}. {instruction}\n\nText to summarize:\n{self.text}"
+    
+    def _detect_spanish(self) -> bool:
+        """Simple Spanish language detection based on common words."""
+        spanish_indicators = ['el', 'la', 'los', 'las', 'un', 'una', 'de', 'que', 'en', 'es', 'por', 'para']
+        text_lower = self.text.lower()
+        words = text_lower.split()
+        
+        if len(words) < 3:
+            return False
+        
+        # Count Spanish indicators
+        spanish_count = sum(1 for word in words[:20] if word in spanish_indicators)
+        return spanish_count >= 3
     
     def __str__(self) -> str:
         """String representation for logging."""

@@ -59,8 +59,13 @@ pip install -r requirements.txt
 
 4. **Configurar variables de entorno**:
 ```bash
+# Copiar el archivo de ejemplo y editarlo con tus valores
 cp .env.example .env
-# Editar .env con tus configuraciones
+
+# Editar .env y configurar:
+# - API_KEYS_ALLOWED: tus API keys para autenticación
+# - PROVIDER_API_KEY: tu API key de OpenAI
+# - Otras configuraciones según necesites
 ```
 
 5. **Ejecutar el servicio**:
@@ -81,9 +86,8 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 **Producción (aplicación completa):**
 ```bash
-# Configurar variables de entorno
-cp .env.example .env
-# Editar .env con tus configuraciones
+# Asegúrate de tener tu archivo .env configurado
+# con las variables de entorno necesarias
 
 # Iniciar todos los servicios
 docker-compose up -d
@@ -107,7 +111,7 @@ docker-compose -f docker-compose.dev.yml up redis-dev -d
 | `REDIS_URL` | URL de Redis (opcional) | `None` |
 | `ENABLE_RATE_LIMIT` | Habilitar rate limiting | `false` |
 
-Ver `.env.example` para la lista completa.
+Ver sección de Configuración para la lista completa de variables.
 
 ## API Endpoints
 

@@ -50,7 +50,7 @@ Thumbs.db
 # Project specific
 logs/
 *.log
-.env
+# .env  # Comentado para permitir copiar .env al contenedor
 .env.local
 .env.production
 

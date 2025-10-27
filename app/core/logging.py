@@ -114,10 +114,10 @@ def setup_logging() -> None:
     logging.root.setLevel(getattr(logging, settings.log_level.upper()))
     logging.root.handlers = [handler]
     
-    # Disable some noisy loggers in production
-    if settings.environment == "production":
-        logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-        logging.getLogger("httpx").setLevel(logging.WARNING)
+    # Disable some noisy loggers
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def get_logger(name: str) -> logging.Logger:

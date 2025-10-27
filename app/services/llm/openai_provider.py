@@ -79,7 +79,7 @@ class OpenAIProvider(LLMProvider, LoggerMixin):
         start_time = time.time()
         
         try:
-            self.logger.info(f"Generating summary with OpenAI: {request}")
+            self.logger.info("Generating summary with OpenAI", extra={"model": self.model, "lang": request.lang})
             
             # Prepare the prompt
             prompt = self._build_prompt(request)
@@ -126,7 +126,7 @@ class OpenAIProvider(LLMProvider, LoggerMixin):
                 model=self.model
             )
             
-            self.logger.info(f"Summary generated successfully: {response}")
+            self.logger.info("Summary generated successfully", extra={"model": self.model, "tokens": usage.total_tokens})
             return response
             
         except openai.RateLimitError as e:
@@ -187,7 +187,7 @@ class OpenAIProvider(LLMProvider, LoggerMixin):
         base_prompt = request.to_llm_prompt()
         
         # Add OpenAI-specific optimizations
-        if request.tone.value == "bullet":
+        if request.tone == "bullet":
             base_prompt += "\n\nFormat your response as clear bullet points (•)."
         
         return base_prompt

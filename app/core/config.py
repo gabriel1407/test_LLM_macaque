@@ -2,7 +2,8 @@
 Configuration management following 12-factor app principles.
 Handles all environment variables and application settings.
 """
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List, Optional
 from enum import Enum
 
@@ -74,10 +75,12 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", env="LOG_LEVEL")
     log_format: str = Field(default="json", env="LOG_FORMAT")  # json or text
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore"
+    )
 
     def get_request_timeout_seconds(self) -> float:
         """Convert request timeout from milliseconds to seconds."""

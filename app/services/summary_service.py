@@ -5,7 +5,6 @@ Implements the core business logic following SOLID principles.
 import asyncio
 import time
 from typing import Optional, List
-from contextlib import asynccontextmanager
 
 from app.core.config import settings
 from app.core.logging import LoggerMixin, log_performance
@@ -157,8 +156,13 @@ class SummaryService(LoggerMixin):
     ) -> None:
         """Try to store summary in cache."""
         try:
+            from datetime import timedelta
+            
             cache_key = request.get_cache_key()
-            ttl = ttl_seconds or settings.redis_ttl
+            ttl_value = ttl_seconds if ttl_seconds is not None else settings.redis_ttl
+            
+            # Convert int seconds to timedelta
+            ttl = timedelta(seconds=ttl_value) if isinstance(ttl_value, int) else ttl_value
             
             await self.cache_service.set_summary(
                 cache_key, 
@@ -194,7 +198,7 @@ class SummaryService(LoggerMixin):
         for fallback_service in self.fallback_services:
             try:
                 # Check if service supports the language
-                if not fallback_service.supports_language(request.lang.value):
+                if not fallback_service.supports_language(request.lang):
                     continue
                 
                 self.logger.info(f"Trying fallback service: {fallback_service.get_algorithm_name()}")
@@ -295,29 +299,32 @@ class CircuitBreaker:
         self.last_failure_time = None
         self.is_open = False
     
-    @asynccontextmanager
-    async def __call__(self):
-        """Context manager for circuit breaker."""
+    async def __aenter__(self):
+        """Async context manager entry."""
         if self.is_open:
             if self._should_attempt_reset():
                 self.is_open = False
                 self.failure_count = 0
             else:
                 raise LLMProviderUnavailableError("Circuit breaker is open")
-        
-        try:
-            yield
-            # Reset failure count on success
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit."""
+        if exc_type is None:
+            # Success - reset failure count
             self.failure_count = 0
-            
-        except self.expected_exception as e:
+            return False
+        
+        if isinstance(exc_val, self.expected_exception):
             self.failure_count += 1
             self.last_failure_time = time.time()
             
             if self.failure_count >= self.failure_threshold:
                 self.is_open = True
-            
-            raise e
+        
+        # Don't suppress the exception
+        return False
     
     def _should_attempt_reset(self) -> bool:
         """Check if enough time has passed to attempt reset."""

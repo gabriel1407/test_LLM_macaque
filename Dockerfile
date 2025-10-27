@@ -48,8 +48,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Create non-root user for security
-RUN groupadd -r appuser && useradd -r -g appuser appuser
+# Create non-root user for security with home directory
+RUN groupadd -r appuser && \
+    useradd -r -g appuser -m -d /home/appuser appuser
 
 # Set working directory
 WORKDIR /app
@@ -60,14 +61,19 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy application code
 COPY app/ ./app/
-COPY .env.example .env
+COPY .env .env
 
-# Create necessary directories
+# Create necessary directories and set permissions
 RUN mkdir -p logs && \
-    chown -R appuser:appuser /app
+    mkdir -p /home/appuser/nltk_data && \
+    chown -R appuser:appuser /app && \
+    chown -R appuser:appuser /home/appuser
 
 # Switch to non-root user
 USER appuser
+
+# Set NLTK data path
+ENV NLTK_DATA=/home/appuser/nltk_data
 
 # Set environment variables
 ENV PYTHONPATH=/app \

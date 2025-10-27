@@ -129,8 +129,11 @@ cache-clear:
 # Environment setup
 setup-env:
 	@echo "Setting up environment..."
-	cp .env.example .env
-	@echo "Please edit .env with your configuration"
+	@if [ ! -f .env ]; then \
+		echo "Error: .env file not found. Please create it with your configuration."; \
+		exit 1; \
+	fi
+	@echo ".env file already exists"
 
 # SSL certificate generation (for development)
 generate-ssl:

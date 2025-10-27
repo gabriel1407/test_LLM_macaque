@@ -7,8 +7,8 @@ import time
 import asyncio
 from typing import Optional, Dict, Any, List
 from datetime import timedelta, datetime
-import aioredis
-from aioredis import Redis
+from redis.asyncio import Redis
+import redis.asyncio as aioredis
 
 from app.core.config import settings
 from app.core.logging import LoggerMixin, log_performance
@@ -152,7 +152,12 @@ class RedisCacheService(CacheServiceWithStats, CacheServiceWithBulkOps, LoggerMi
             serialized_data = json.dumps(data, default=str)
             
             # Set TTL
-            ttl_seconds = int(ttl.total_seconds()) if ttl else self.default_ttl
+            if ttl is None:
+                ttl_seconds = self.default_ttl
+            elif isinstance(ttl, timedelta):
+                ttl_seconds = int(ttl.total_seconds())
+            else:
+                ttl_seconds = int(ttl)
             
             # Store in Redis
             await self.redis.setex(cache_key, ttl_seconds, serialized_data)
@@ -277,7 +282,12 @@ class RedisCacheService(CacheServiceWithStats, CacheServiceWithBulkOps, LoggerMi
             await self.connect()
         
         try:
-            ttl_seconds = int(ttl.total_seconds()) if ttl else self.default_ttl
+            if ttl is None:
+                ttl_seconds = self.default_ttl
+            elif isinstance(ttl, timedelta):
+                ttl_seconds = int(ttl.total_seconds())
+            else:
+                ttl_seconds = int(ttl)
             
             # Use pipeline for efficiency
             pipe = self.redis.pipeline()
@@ -459,7 +469,7 @@ class RedisRateLimitService(RateLimitService, LoggerMixin):
         
         try:
             current_time = int(time.time())
-            window_seconds = int(window.total_seconds())
+            window_seconds = int(window.total_seconds()) if isinstance(window, timedelta) else int(window)
             
             # Use sliding window with Redis sorted sets
             key = f"rate_limit:{identifier}"
@@ -499,7 +509,7 @@ class RedisRateLimitService(RateLimitService, LoggerMixin):
         
         try:
             current_time = int(time.time())
-            window_seconds = int(window.total_seconds())
+            window_seconds = int(window.total_seconds()) if isinstance(window, timedelta) else int(window)
             
             key = f"rate_limit:{identifier}"
             
@@ -533,7 +543,8 @@ class RedisRateLimitService(RateLimitService, LoggerMixin):
             
             if oldest_entries:
                 oldest_time = int(oldest_entries[0][1])
-                reset_time = oldest_time + int(window.total_seconds())
+                window_seconds = int(window.total_seconds()) if isinstance(window, timedelta) else int(window)
+                reset_time = oldest_time + window_seconds
                 return reset_time
             
             return None

@@ -72,10 +72,10 @@ deploy_local() {
     
     # Check if .env exists
     if [[ ! -f .env ]]; then
-        log_warning ".env file not found, copying from .env.example"
-        cp .env.example .env
-        log_warning "Please edit .env with your configuration"
+        log_error ".env file not found. Please create it with your configuration."
+        exit 1
     fi
+    log_info ".env file found"
     
     # Start Redis for development
     log_info "Starting Redis..."

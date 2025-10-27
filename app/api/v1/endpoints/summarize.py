@@ -203,7 +203,7 @@ async def create_summary(
             user_id=current_user.user_id,
             request_id=request_id,
             tokens_used=summary_response.usage.total_tokens,
-            source=summary_response.source.value
+            source=summary_response.source
         )
         
         logger.info(
@@ -213,7 +213,7 @@ async def create_summary(
                 "user_id": current_user.user_id,
                 "latency_ms": total_latency,
                 "summary_length": len(summary_response.summary),
-                "source": summary_response.source.value
+                "source": summary_response.source
             }
         )
         
