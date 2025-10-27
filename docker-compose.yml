@@ -1,0 +1,128 @@
+version: '3.8'
+
+services:
+  # Redis service for caching and rate limiting
+  redis:
+    image: redis:7-alpine
+    container_name: llm-summarizer-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - llm-summarizer-network
+
+  # LLM Summarizer API service
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: llm-summarizer-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Application Configuration
+      - APP_NAME=LLM Summarizer Service
+      - ENVIRONMENT=production
+      - DEBUG=false
+      
+      # API Configuration
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - API_KEYS_ALLOWED=["your-production-api-key-1","your-production-api-key-2"]
+      
+      # LLM Provider Configuration
+      - LLM_PROVIDER=openai
+      - PROVIDER_API_KEY=${OPENAI_API_KEY}
+      
+      # Summary Configuration
+      - SUMMARY_MAX_TOKENS=150
+      - LANG_DEFAULT=auto
+      - MAX_TEXT_LENGTH=50000
+      
+      # Timeout and Retry Configuration
+      - REQUEST_TIMEOUT_MS=10000
+      - LLM_TIMEOUT_MS=8000
+      - MAX_RETRIES=2
+      - RETRY_DELAY_MS=1000
+      
+      # Rate Limiting
+      - ENABLE_RATE_LIMIT=true
+      - RATE_LIMIT_REQUESTS=100
+      - RATE_LIMIT_WINDOW=3600
+      
+      # Redis Configuration
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_TTL=3600
+      
+      # Security
+      - CORS_ORIGINS=["*"]
+      - MAX_PAYLOAD_SIZE=1048576
+      
+      # Logging
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=json
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - llm-summarizer-network
+    volumes:
+      - ./logs:/app/logs
+
+  # Redis Commander for Redis management (optional)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: llm-summarizer-redis-commander
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+      - HTTP_USER=admin
+      - HTTP_PASSWORD=admin123
+    depends_on:
+      - redis
+    networks:
+      - llm-summarizer-network
+    profiles:
+      - tools
+
+  # Nginx reverse proxy (optional)
+  nginx:
+    image: nginx:alpine
+    container_name: llm-summarizer-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+    networks:
+      - llm-summarizer-network
+    profiles:
+      - production
+
+volumes:
+  redis_data:
+    driver: local
+
+networks:
+  llm-summarizer-network:
+    driver: bridge

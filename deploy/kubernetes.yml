@@ -1,0 +1,345 @@
+# Kubernetes deployment configuration for LLM Summarizer Service
+# Production-ready deployment with Redis, scaling, and monitoring
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm-summarizer
+  labels:
+    name: llm-summarizer
+
+---
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llm-summarizer-config
+  namespace: llm-summarizer
+data:
+  APP_NAME: "LLM Summarizer Service"
+  ENVIRONMENT: "production"
+  DEBUG: "false"
+  API_HOST: "0.0.0.0"
+  API_PORT: "8000"
+  LLM_PROVIDER: "openai"
+  SUMMARY_MAX_TOKENS: "150"
+  LANG_DEFAULT: "auto"
+  MAX_TEXT_LENGTH: "50000"
+  REQUEST_TIMEOUT_MS: "10000"
+  LLM_TIMEOUT_MS: "8000"
+  MAX_RETRIES: "2"
+  RETRY_DELAY_MS: "1000"
+  ENABLE_RATE_LIMIT: "true"
+  RATE_LIMIT_REQUESTS: "100"
+  RATE_LIMIT_WINDOW: "3600"
+  REDIS_URL: "redis://redis-service:6379/0"
+  REDIS_TTL: "3600"
+  CORS_ORIGINS: '["*"]'
+  MAX_PAYLOAD_SIZE: "1048576"
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+
+---
+# Secret for sensitive configuration
+apiVersion: v1
+kind: Secret
+metadata:
+  name: llm-summarizer-secrets
+  namespace: llm-summarizer
+type: Opaque
+stringData:
+  PROVIDER_API_KEY: "your-openai-api-key-here"
+  API_KEYS_ALLOWED: '["your-production-api-key-1","your-production-api-key-2"]'
+
+---
+# Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: llm-summarizer
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        command:
+        - redis-server
+        - --appendonly
+        - "yes"
+        - --maxmemory
+        - "512mb"
+        - --maxmemory-policy
+        - "allkeys-lru"
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: redis-pvc
+
+---
+# Redis PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-pvc
+  namespace: llm-summarizer
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# Redis Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: llm-summarizer
+  labels:
+    app: redis
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+  type: ClusterIP
+
+---
+# LLM Summarizer API Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-summarizer-api
+  namespace: llm-summarizer
+  labels:
+    app: llm-summarizer-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: llm-summarizer-api
+  template:
+    metadata:
+      labels:
+        app: llm-summarizer-api
+    spec:
+      containers:
+      - name: api
+        image: llm-summarizer:latest
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - configMapRef:
+            name: llm-summarizer-config
+        - secretRef:
+            name: llm-summarizer-secrets
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /v1/healthz
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /v1/healthz
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /v1/healthz
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+      initContainers:
+      - name: wait-for-redis
+        image: busybox:1.35
+        command: ['sh', '-c']
+        args:
+        - |
+          until nc -z redis-service 6379; do
+            echo "Waiting for Redis..."
+            sleep 2
+          done
+          echo "Redis is ready!"
+
+---
+# API Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-summarizer-service
+  namespace: llm-summarizer
+  labels:
+    app: llm-summarizer-api
+spec:
+  selector:
+    app: llm-summarizer-api
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+  type: ClusterIP
+
+---
+# Ingress for external access
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: llm-summarizer-ingress
+  namespace: llm-summarizer
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - api.yourdomain.com
+    secretName: llm-summarizer-tls
+  rules:
+  - host: api.yourdomain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: llm-summarizer-service
+            port:
+              number: 80
+
+---
+# HorizontalPodAutoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: llm-summarizer-hpa
+  namespace: llm-summarizer
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: llm-summarizer-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+# PodDisruptionBudget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: llm-summarizer-pdb
+  namespace: llm-summarizer
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: llm-summarizer-api
+
+---
+# NetworkPolicy for security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: llm-summarizer-netpol
+  namespace: llm-summarizer
+spec:
+  podSelector:
+    matchLabels:
+      app: llm-summarizer-api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443  # HTTPS for LLM APIs
+    - protocol: TCP
+      port: 53   # DNS
+    - protocol: UDP
+      port: 53   # DNS
