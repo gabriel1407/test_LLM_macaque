@@ -34,7 +34,7 @@ Cliente → API (FastAPI) → LLM Provider
 
 ### Prerrequisitos
 
-- Python 3.9+
+- Python 3.12
 - Redis (opcional, para caché y rate limiting)
 - Docker y Docker Compose (opcional)
 
